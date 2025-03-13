@@ -1,0 +1,254 @@
+# ----- Constants and Helper Functions -----
+$NUM_100K_SETS = 6
+$SET_ORIGIN_COLUMN_LETTERS = @("A","J","S","A","J","S")
+$SET_ORIGIN_ROW_LETTERS    = @("A","F","A","F","A","F")
+
+# ASCII codes for letters
+$A = 65
+$I = 73
+$O = 79
+$V = 86
+$Z = 90
+
+function ToCodePoint {
+    param([string]$char)
+    return [int][char]$char
+}
+function FromCodePoint {
+    param([int]$code)
+    return [char]$code
+}
+
+function DegToRad {
+    param([double]$deg)
+    return $deg * ([math]::PI / 180.0)
+}
+
+function RadToDeg {
+    param([double]$rad)
+    return 180.0 * ($rad / [math]::PI)
+}
+
+# ----- MGRS Letter Designator (Latitude Band) -----
+function GetLetterDesignator {
+    param([double]$lat)
+
+    if ($lat -ge 72 -and $lat -lt 84) { return "X" }
+    elseif ($lat -ge 64 -and $lat -lt 72) { return "W" }
+    elseif ($lat -ge 56 -and $lat -lt 64) { return "V" }
+    elseif ($lat -ge 48 -and $lat -lt 56) { return "U" }
+    elseif ($lat -ge 40 -and $lat -lt 48) { return "T" }
+    elseif ($lat -ge 32 -and $lat -lt 40) { return "S" }
+    elseif ($lat -ge 24 -and $lat -lt 32) { return "R" }
+    elseif ($lat -ge 16 -and $lat -lt 24) { return "Q" }
+    elseif ($lat -ge 8 -and $lat -lt 16)  { return "P" }
+    elseif ($lat -ge 0 -and $lat -lt 8)   { return "N" }
+    elseif ($lat -ge -8 -and $lat -lt 0)  { return "M" }
+    elseif ($lat -ge -16 -and $lat -lt -8) { return "L" }
+    elseif ($lat -ge -24 -and $lat -lt -16){ return "K" }
+    elseif ($lat -ge -32 -and $lat -lt -24){ return "J" }
+    elseif ($lat -ge -40 -and $lat -lt -32){ return "H" }
+    elseif ($lat -ge -48 -and $lat -lt -40){ return "G" }
+    elseif ($lat -ge -56 -and $lat -lt -48){ return "F" }
+    elseif ($lat -ge -64 -and $lat -lt -56){ return "E" }
+    elseif ($lat -ge -72 -and $lat -lt -64){ return "D" }
+    elseif ($lat -ge -80 -and $lat -lt -72){ return "C" }
+    elseif ($lat -ge -90 -and $lat -lt -80){ return "B" }
+    elseif ($lat -ge 84 -and $lat -le 90){return "Y"}
+    else { return "Z" } # Handles latitudes outside the defined ranges
+}
+# ----- Convert Lat/Lon to UTM -----
+function LLtoUTM {
+    param([double]$lat, [double]$lon)
+
+    $a = 6378137.0
+    $eccSquared = 0.00669438
+    $k0 = 0.9996
+
+    $latRad = DegToRad $lat
+    $lonRad = DegToRad $lon
+
+    $zoneNumber = [math]::Floor(($lon + 180) / 6) + 1
+    if ($lon -eq 180) { $zoneNumber = 60 }
+    if ($lat -ge 56.0 -and $lat -lt 64.0 -and $lon -ge 3.0 -and $lon -lt 12.0) { $zoneNumber = 32 }
+    if ($lat -ge 72.0 -and $lat -lt 84.0) {
+        if ($lon -ge 0.0 -and $lon -lt 9.0) { $zoneNumber = 31 }
+        elseif ($lon -ge 9.0 -and $lon -lt 21.0) { $zoneNumber = 33 }
+        elseif ($lon -ge 21.0 -and $lon -lt 33.0) { $zoneNumber = 35 }
+        elseif ($lon -ge 33.0 -and $lon -lt 42.0) { $zoneNumber = 37 }
+    }
+
+    $lonOrigin = ($zoneNumber - 1) * 6 - 180 + 3
+    $lonOriginRad = DegToRad $lonOrigin
+    $eccPrimeSquared = $eccSquared / (1 - $eccSquared)
+
+    $N = $a / [math]::Sqrt(1 - $eccSquared * [math]::Sin($latRad)*[math]::Sin($latRad))
+    $T = [math]::Tan($latRad) * [math]::Tan($latRad)
+    $C = $eccPrimeSquared * [math]::Cos($latRad) * [math]::Cos($latRad)
+    $A_ = [math]::Cos($latRad) * ($lonRad - $lonOriginRad)
+
+    $M = $a * ((1 - $eccSquared/4 - 3*[math]::Pow($eccSquared,2)/64 - 5*[math]::Pow($eccSquared,3)/256) * $latRad -
+            (3*$eccSquared/8 + 3*[math]::Pow($eccSquared,2)/32 + 45*[math]::Pow($eccSquared,3)/1024) * [math]::Sin(2*$latRad) +
+            (15*[math]::Pow($eccSquared,2)/256 + 45*[math]::Pow($eccSquared,3)/1024) * [math]::Sin(4*$latRad) -
+            (35*[math]::Pow($eccSquared,3)/3072) * [math]::Sin(6*$latRad))
+
+    $UTMEasting = $k0 * $N * ($A_ + (1 - $T + $C)*[math]::Pow($A_,3)/6 + (5 - 18*$T + [math]::Pow($T,2) + 72*$C - 58*$eccPrimeSquared)*[math]::Pow($A_,5)/120) + 500000.0
+    $UTMNorthing = $k0 * ($M + $N * [math]::Tan($latRad) * ([math]::Pow($A_,2)/2 + (5 - $T + 9*$C + 4*[math]::Pow($C,2))*[math]::Pow($A_,4)/24 +
+                        (61 - 58*$T + [math]::Pow($T,2) + 600*$C - 330*$eccPrimeSquared)*[math]::Pow($A_,6)/720))
+    if ($lat -lt 0.0) { $UTMNorthing += 10000000.0 }
+
+    return @{
+        "northing" = [math]::Floor($UTMNorthing + 0.5)
+        "easting"  = [math]::Floor($UTMEasting + 0.5)
+        "zoneNumber" = $zoneNumber
+        "zoneLetter" = GetLetterDesignator $lat
+    }
+}
+
+# ----- 100,000-meter Grid Square Calculation -----
+function Get100kSetForZone {
+    param([int]$zoneNumber)
+    $setParm = $zoneNumber % $NUM_100K_SETS
+    if ($setParm -eq 0) { $setParm = $NUM_100K_SETS }
+    return $setParm
+}
+
+function GetLetter100kID {
+    param([int]$column, [int]$row, [int]$parm)
+    $index = $parm - 1
+    $colOrigin = ToCodePoint $SET_ORIGIN_COLUMN_LETTERS[$index]
+    $rowOrigin = ToCodePoint $SET_ORIGIN_ROW_LETTERS[$index]
+    $colInt = $colOrigin + $column - 1
+    $rowInt = $rowOrigin + $row
+    $rollover = $false
+    if ($colInt -gt $Z) {
+        $colInt = $colInt - $Z + $A - 1
+        $rollover = $true
+    }
+    if (($colInt -eq $I) -or (($colOrigin -lt $I) -and ($colInt -gt $I)) -or (((($colInt -gt $I) -or ($colOrigin -lt $I)) -and $rollover))) {
+        $colInt += 1
+    }
+    if (($colInt -eq $O) -or (($colOrigin -lt $O) -and ($colInt -gt $O)) -or (((($colInt -gt $O) -or ($colOrigin -lt $O)) -and $rollover))) {
+        $colInt += 1
+    }
+    if ($colInt -eq $I) { $colInt += 1 }
+    if ($colInt -gt $Z) {
+        $colInt = $colInt - $Z + $A - 1
+    }
+    if ($rowInt -gt $V) {
+        $rowInt = $rowInt - $V + $A - 1
+        $rollover = $true
+    } else {
+        $rollover = $false
+    }
+    if ((($rowInt -eq $I) -or (($rowOrigin -lt $I) -and ($rowInt -gt $I))) -or (((($rowInt -gt $I) -or ($rowOrigin -lt $I)) -and $rollover))) {
+        $rowInt += 1
+    }
+    if ((($rowInt -eq $O) -or (($rowOrigin -lt $O) -and ($rowInt -gt $O))) -or (((($rowInt -gt $O) -or ($rowOrigin -lt $O)) -and $rollover))) {
+        $rowInt += 1
+    }
+    if ($rowInt -gt $V) {
+        $rowInt = $rowInt - $V + $A - 1
+    }
+    return (FromCodePoint $colInt) + (FromCodePoint $rowInt)
+}
+
+function Get100kID {
+    param([double]$easting, [double]$northing, [int]$zoneNumber)
+    $setParm = Get100kSetForZone $zoneNumber
+    $setColumn = [math]::Floor($easting / 100000)
+    $setRow = [math]::Floor($northing / 100000) % 20
+    return GetLetter100kID $setColumn $setRow $setParm
+}
+
+# ----- Encode UTM into Full MGRS String -----
+function Encode {
+    param($utm, $accuracy)
+    # Format the remainders as 5-digit strings
+    $seasting = "{0:00000}" -f ($utm["easting"] % 100000)
+    $snorthing = "{0:00000}" -f ($utm["northing"] % 100000)
+    $id100k = Get100kID $utm["easting"] $utm["northing"] $utm["zoneNumber"]
+    return "$($utm["zoneNumber"])$($utm["zoneLetter"])$id100k$seasting$snorthing"
+}
+
+# ----- Main: Convert Lat/Lon to MGRS -----
+function LLtoMGRS {
+    param([double]$lat, [double]$lon)
+    $accuracy = 5  # Example accuracy
+    return Encode (LLtoUTM $lat $lon) $accuracy
+}
+
+
+Write-Host "Choose an input method:"
+Write-Host "1 - Enter Latitude/Longitude"
+Write-Host "2 - Provide path to CSV file"
+Write-Host "3 - Provide path to TXT file"
+
+$choice = Read-Host "Enter your choice (1, 2, or 3)"
+
+switch ($choice) {
+    "1" {
+        $latitude = Read-Host "Enter Latitude"
+        $longitude = Read-Host "Enter Longitude"
+        $mgrs = LLtoMGRS ([double]$latitude) ([double]$longitude)
+        Write-Host "MGRS Coordinate: $mgrs"
+    }
+    "2" {
+        $csvPath = Read-Host "Enter path to CSV file"
+        $latColumn = Read-Host "Enter Latitude column name"
+        $lonColumn = Read-Host "Enter Longitude column name"
+
+        try {
+            $csvData = Import-Csv -Path $csvPath
+            foreach ($row in $csvData) {
+                $latitude = $row.$latColumn
+                $longitude = $row.$lonColumn
+                $mgrs = LLtoMGRS ([double]$latitude) ([double]$longitude)
+                Write-Host "MGRS Coordinate: $mgrs"
+            }
+        } catch {
+            Write-Error "Error processing CSV file: $($_.Exception.Message)"
+        }
+    }
+    "3" {
+        $txtPath = Read-Host "Enter path to TXT file"
+        $latColumnIndex = Read-Host "Enter Latitude column index (starting from 0)"
+        $lonColumnIndex = Read-Host "Enter Longitude column index (starting from 0)"
+        $delimiter = Read-Host "Enter the delimiter used in the text file(e.g. )"
+
+        try {
+            $filePath = $txtPath
+            $txtContent = Get-Content -Path $filePath
+            if (Test-Path $filePath) {
+                $lines = Get-Content -Path $filePath
+                # Skip the first line (headers)
+                for ($i = 1; $i -lt $lines.Count; $i++) {
+                    $line = $lines[$i]
+                    $parts = $line -split $delimiter # Tab delimiter
+            
+                    if ($parts.Count -ge 3) { #Check for 3 because of z-value
+                        $latitude = $parts[1] #Latitude is the second column
+                        $longitude = $parts[2] #Longitude is the third column
+            
+                        if ($latitude -match '^-?\d+(\.\d+)?$' -and $longitude -match '^-?\d+(\.\d+)?$') {
+                            $latitude = [double]$latitude
+                            $longitude = [double]$longitude
+                            Write-Host "Latitude: $latitude, Longitude: $longitude"
+                        } else {
+                            Write-Warning "Invalid latitude or longitude format in line: $line"
+                        }
+                    } else {
+                        Write-Warning "Insufficient data in line: $line"
+                    }
+                }
+            } else {
+                Write-Error "File not found: $filePath"
+            }
+        } catch {
+            Write-Error "Error processing TXT file: $($_.Exception.Message)"
+        }
+    }
+    default {
+        Write-Host "Invalid choice."
+    }
+}
