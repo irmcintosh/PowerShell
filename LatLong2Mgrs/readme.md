@@ -1,4 +1,3 @@
-```markdown
 # Lat-Lon to MGRS Converter (PowerShell)
 
 This repository contains a PowerShell script that converts geographic coordinates (latitude/longitude) into Military Grid Reference System (MGRS) coordinates. The script supports multiple input methods (manual entry, CSV file, and TXT file) and includes an option to save the output in the same format as the input.
@@ -120,19 +119,3 @@ Contributions are highly welcome! If you have suggestions, bug fixes, or new fea
 3. Submit a pull request detailing your improvements.
 4. Open an issue if you encounter any problems.
 
-## License
-This project is licensed under the [MIT License](LICENSE).
-
-## Acknowledgements
-- Appreciation goes to the open-source community for inspiration and valuable contributions in the field of geospatial tools.
-- Special thanks to documentation and resources related to the Military Grid Reference System (MGRS).
-
-## Contact
-For questions, feedback, or support, please contact:
-- **Your Name:** [YourEmail@example.com](mailto:YourEmail@example.com)
-- **GitHub:** [yourusername](https://github.com/yourusername)
-```
-
----
-
-Feel free to customize the details (such as repository URL, your name, and contact information) to match your project and personal preferences.
