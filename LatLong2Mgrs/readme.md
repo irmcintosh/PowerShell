@@ -47,7 +47,7 @@ The Lat-Lon to MGRS Converter is a comprehensive PowerShell script that converts
    - Ensure you are using Windows PowerShell 5.1 (or later) or PowerShell Core.
    - Execute the script with:
      ```powershell
-     .\LatLonToMGRS.ps1
+     powershell -ExecutionPolicy Bypass -File LatLonToMGRS.ps1
      ```
 
 ## Usage
