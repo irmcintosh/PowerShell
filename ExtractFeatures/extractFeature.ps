@@ -1,0 +1,50 @@
+# -----------------------------------------------
+# Query NCNG_Facility Feature Service and print all records (with geometry)
+# -----------------------------------------------
+
+# 1) Configuration
+$baseURL = "https://services5.arcgis.com/8IgLLe5RXlERqmOO/ArcGIS/rest/services/NCNG_Facility/FeatureServer/0"
+
+# 2) Get service info (to learn maxRecordCount)
+Write-Host "Fetching service info…" -ForegroundColor Cyan
+$infoUri = "$baseURL?f=pjson"
+Write-Host "  GET $infoUri"
+$svcInfo = Invoke-RestMethod -Uri $infoUri -Method Get
+$maxRC   = [int]$svcInfo.maxRecordCount
+Write-Host "  → maxRecordCount = $maxRC`n" -ForegroundColor Green
+
+# 3) Get all object IDs
+Write-Host "Fetching all object IDs…" -ForegroundColor Cyan
+$idUri   = "$baseURL/query?where=1=1&returnIdsOnly=true&f=json"
+Write-Host "  GET $idUri"
+$idRes   = Invoke-RestMethod -Uri $idUri -Method Get
+$idField = $idRes.objectIdFieldName
+$idList  = $idRes.objectIds | Sort-Object
+$total   = $idList.Count
+Write-Host "  → Found $total IDs in field '$idField'" -ForegroundColor Green
+
+# 4) Loop through IDs in chunks and print features (attributes + geometry)
+Write-Host "`nQuerying in batches of $maxRC…" -ForegroundColor Cyan
+for ($i = 0; $i -lt $total; $i += $maxRC) {
+    $endIndex = [math]::Min($i + $maxRC - 1, $total - 1)
+    $fromID   = $idList[$i]
+    $toID     = $idList[$endIndex]
+    $where    = "$idField >= $fromID AND $idField <= $toID"
+
+    Write-Host "  Batch $([math]::Floor($i/$maxRC)+1): $where" -ForegroundColor Yellow
+    $queryUrl = "$baseURL/query?where=$([uri]::EscapeDataString($where))&outFields=*&returnGeometry=true&f=json"
+    Write-Host "    GET $queryUrl"
+    $resp = Invoke-RestMethod -Uri $queryUrl -Method Get
+
+    foreach ($feat in $resp.features) {
+        # Print attributes
+        Write-Host "Attributes:" -ForegroundColor DarkCyan
+        $feat.attributes | ConvertTo-Json -Depth 5
+
+        # Print geometry
+        Write-Host "Geometry:" -ForegroundColor DarkMagenta
+        $feat.geometry   | ConvertTo-Json -Depth 5
+    }
+}
+
+Write-Host "`nDone! Printed $total records (including geometry)." -ForegroundColor Green
